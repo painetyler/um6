@@ -185,7 +185,7 @@ bool handleResetService(um6::Comms* sensor,
  * the ROS messages which are output.
  */
 void publishMsgs(um6::Registers& r, ros::NodeHandle* imu_nh, sensor_msgs::Imu& imu_msg,
-    bool tf_ned_to_enu, bool use_magnetic_field_msg)
+		 bool tf_ned_to_enu, bool use_magnetic_field_msg, bool apply_mag_correction_transform)
 {
   static ros::Publisher imu_pub = imu_nh->advertise<sensor_msgs::Imu>("data", 1, false);
   static ros::Publisher mag_pub;
@@ -251,22 +251,40 @@ void publishMsgs(um6::Registers& r, ros::NodeHandle* imu_nh, sensor_msgs::Imu& i
 
   if (mag_pub.getNumSubscribers() > 0)
   {
+
+    double temp_mag_x, temp_mag_y, temp_mag_z;
+
+    if (apply_mag_correction_transform)
+    {
+      temp_mag_x =  r.mag.get_scaled(0);
+      temp_mag_y =  r.mag.get_scaled(2);
+      temp_mag_z = -r.mag.get_scaled(1);
+    }
+    else
+    {
+      temp_mag_x = r.mag.get_scaled(0);
+      temp_mag_y = r.mag.get_scaled(1);
+      temp_mag_z = r.mag.get_scaled(2);
+    }
+    
+    
     if (use_magnetic_field_msg)
     {
       sensor_msgs::MagneticField mag_msg;
       mag_msg.header = imu_msg.header;
 
+
       if (tf_ned_to_enu)
       {
-        mag_msg.magnetic_field.x = r.mag.get_scaled(1);
-        mag_msg.magnetic_field.y = r.mag.get_scaled(0);
-        mag_msg.magnetic_field.z = -r.mag.get_scaled(2);
+        mag_msg.magnetic_field.x =  temp_mag_y;   
+	mag_msg.magnetic_field.y =  temp_mag_x;   
+        mag_msg.magnetic_field.z = -temp_mag_z;  
       }
       else
       {
-        mag_msg.magnetic_field.x = r.mag.get_scaled(0);
-        mag_msg.magnetic_field.y = r.mag.get_scaled(1);
-        mag_msg.magnetic_field.z = r.mag.get_scaled(2);
+        mag_msg.magnetic_field.x = temp_mag_x;
+        mag_msg.magnetic_field.y = temp_mag_y;
+        mag_msg.magnetic_field.z = temp_mag_z;
       }
 
       mag_pub.publish(mag_msg);
@@ -278,15 +296,15 @@ void publishMsgs(um6::Registers& r, ros::NodeHandle* imu_nh, sensor_msgs::Imu& i
 
       if (tf_ned_to_enu)
       {
-        mag_msg.vector.x = r.mag.get_scaled(1);
-        mag_msg.vector.y = r.mag.get_scaled(0);
-        mag_msg.vector.z = -r.mag.get_scaled(2);
+        mag_msg.vector.x =  temp_mag_y;        
+        mag_msg.vector.y =  temp_mag_x;        
+        mag_msg.vector.z = -temp_mag_z;        
       }
       else
       {
-        mag_msg.vector.x = r.mag.get_scaled(0);
-        mag_msg.vector.y = r.mag.get_scaled(1);
-        mag_msg.vector.z = r.mag.get_scaled(2);
+        mag_msg.vector.x = temp_mag_x;
+        mag_msg.vector.y = temp_mag_y;
+        mag_msg.vector.z = temp_mag_z;
       }
 
       mag_pub.publish(mag_msg);
@@ -357,9 +375,14 @@ int main(int argc, char **argv)
   bool tf_ned_to_enu;
   private_nh.param<bool>("tf_ned_to_enu", tf_ned_to_enu, true);
 
+  // Apply mag correction tranformation: +pi/2 rotation about x axis
+  bool apply_mag_correction_transform;
+  private_nh.param<bool>("apply_mag_correction_transform", apply_mag_correction_transform, false);
+
   // Use MagneticField message rather than Vector3Stamped.
   bool use_magnetic_field_msg;
   private_nh.param<bool>("use_magnetic_field_msg", use_magnetic_field_msg, false);
+
 
   imu_msg.linear_acceleration_covariance[0] = linear_acceleration_cov;
   imu_msg.linear_acceleration_covariance[4] = linear_acceleration_cov;
@@ -398,7 +421,8 @@ int main(int argc, char **argv)
           {
             // Triggered by arrival of final message in group.
             imu_msg.header.stamp = ros::Time::now();
-            publishMsgs(registers, &imu_nh, imu_msg, tf_ned_to_enu, use_magnetic_field_msg);
+            publishMsgs(registers, &imu_nh, imu_msg, tf_ned_to_enu,
+			use_magnetic_field_msg, apply_mag_correction_transform);
             ros::spinOnce();
           }
         }
