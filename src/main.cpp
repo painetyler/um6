@@ -256,7 +256,7 @@ void publishMsgs(um6::Registers& r, ros::NodeHandle* imu_nh, sensor_msgs::Imu& i
 
     if (apply_mag_correction_transform)
     {
-      temp_mag_x =  r.mag.get_scaled(0);
+      temp_mag_x =  -r.mag.get_scaled(0);
       temp_mag_y =  r.mag.get_scaled(2);
       temp_mag_z = -r.mag.get_scaled(1);
     }
